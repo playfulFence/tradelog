@@ -1,0 +1,345 @@
+#! /bin/sh
+
+#-----------------------------------------#
+# MIKHAILOV KIRILL                        #
+# UNIVERSITY: BUT in BRNO, CZECH REPUBLIC #
+# BUT LOGIN: xmikha00                     #
+# 03.04.2021                              #
+# IOS PROJECT 1                           #
+#-----------------------------------------#
+
+
+print_help()
+{
+    echo "Usage: tradelog [-h|--help]"
+    echo "       tradelog [FILTER...] [COMMAND] [LOG...]"
+    echo ""
+    echo "---------------------------------------DETAILED DESCRIPTION------------------------------------"
+    echo "  COMMAND can be ONE of:"
+    echo "|-----------------------------------------------------------------------------------------|"
+    echo "|• list-tick -- a list of occurring stock exchange symbols, so-called \"tickers\".          |" 
+    echo "|-----------------------------------------------------------------------------------------|"
+    echo "|• profit -- statement of total profit from closed positions.                             |"
+    echo "|-----------------------------------------------------------------------------------------|"
+    echo "|• pos -- list of values of currently held positions sorted in descending order by value. |" 
+    echo "|-----------------------------------------------------------------------------------------|"
+    echo "|• last-price -- list of the last known price for each ticker.                            |" 
+    echo "|-----------------------------------------------------------------------------------------|"
+    echo "|• hist-ord -- shows the histogram of the number of transactions according to the ticker. |" 
+    echo "|-----------------------------------------------------------------------------------------|"
+    echo "|• graph-pos -- shows the graph of values of held positions according to the ticker.      |" 
+    echo "|_________________________________________________________________________________________|"
+    echo ""
+    echo " The FILTER can be a COMBINATION of:"
+    echo "|---------------------------------------------------------------------------------------------|"
+    echo "|• -a DATETIME -- after: only records AFTER this date (without this date) are considered.     |" 
+    echo "|                DATETIME is in the format YYYY-MM-DD HH:MM:SS.                               |"
+    echo "|---------------------------------------------------------------------------------------------|"
+    echo "|• -b DATETIME -- before: only records BEFORE this date (without this date) are considered.   |"
+    echo "|               DATETIME is in the format YYYY-MM-DD HH:MM:SS.                                |"
+    echo "|---------------------------------------------------------------------------------------------|"
+    echo "|• -t TICKER -- only records corresponding to the given ticker are considered.                |"
+    echo "|             With multiple occurrences of the switch, the set of all listed ticker is taken. |"
+    echo "|---------------------------------------------------------------------------------------------|"
+    echo "|• -w WIDTH -- sets the width of the GRAPH listing, the length of the longest line to WIDTH.. |"
+    echo "|              Thus, WIDTH must be a positive integer                                         |"
+    echo "|             Multiple occurrences of the switch is a faulty start.                           |" 
+    echo "|---------------------------------------------------------------------------------------------|"
+    echo "|• -h and -help -- print help with a brief description of each command and switch.            |"
+    echo "|_____________________________________________________________________________________________|"
+}
+
+
+
+DATE_CONTROL_REGEX='^[0-9]{4}[-/](0[1-9]|1[0-2])[-/](0[1-9]|[1-2][0-9]|3[0-1])[ ](0[0-9]|1[0-9]|2[0-3])[:][0-5][0-9][:][0-5][0-9]$'
+WIDTH_CONTROL_REGEX='^[0-9]*$'
+
+
+DATETIME_BEFORE="9999-12-31 23:59:59"
+DATETIME_AFTER="0000-00-00 00:00:00"
+
+
+
+while [ "$#" -gt 0 ]; do 
+    case "$1" in
+    *.log)
+        if [[ -e "$1" && -r "$1" ]]; then
+            LOG_FILES="$LOG_FILES $1"
+            shift
+        else
+            echo "---------------------------------------------"
+            echo "ERROR: FILE IS NOT READABLE OR DOES NOT EXIST"
+            echo "---------------------------------------------"
+            exit 1 
+        fi
+        ;;
+    *.log.gz)
+        if [[ -e "$1" && -r "$1" ]]; then 
+            GZ_LOG_FILES="$GZ_LOG_FILES $1"
+            shift
+        else
+            echo "--------------------------------------------------"
+            echo "ERROR: GZIP FILE IS NOT READABLE OR DOES NOT EXIST"
+            echo "--------------------------------------------------"
+            exit 1
+        fi
+        ;;
+    list-tick | profit | pos | last-price | hist-ord | graph-pos)
+        if [[ -z "$COMMAND" ]]; then
+            COMMAND="$1"
+            shift
+        else
+            echo "----------------------------------------------"
+            echo "ERROR: YOU CAN ONLY USE ONE COMMAND AT ONE RUN"
+            echo "----------------------------------------------"
+            exit 1
+        fi
+        ;;
+    -a)
+        DATETIME_AFTER="$2"
+        if [[ $DATETIME_AFTER =~ $DATE_CONTROL_REGEX ]]; then
+            shift
+            shift
+        else 
+            echo "------------------------"
+            echo "ERROR: WRONG DATA FORMAT"
+            echo "------------------------"
+            exit 1
+        fi
+        ;;
+    -b)
+        DATETIME_BEFORE="$2"
+        if [[ $DATETIME_BEFORE =~ $DATE_CONTROL_REGEX ]]; then
+          shift
+          shift
+      else 
+          echo "------------------------"
+          echo "ERROR: WRONG DATA FORMAT"
+          echo "------------------------"
+          exit 1
+      fi
+        ;;
+    -t)
+        if [[ -z "$TICKER" ]]; then
+            TICKER="$2"
+        else
+            TICKER="$TICKER $2"
+        fi
+        shift
+        shift
+        ;;
+    -w) 
+        if [[ -n "$WIDTH" ]]; then
+            echo "----------------------------------"
+            echo "ERROR: YOU CAN ONLY SET WIDTH ONCE"
+            echo "----------------------------------"
+            exit 1
+        elif [[ "$2" =~ $WIDTH_CONTROL_REGEX ]]; then
+            WIDTH="$2"
+            shift
+            shift
+        else 
+            echo "-------------------------------------------------"
+            echo "ERROR: WRONG WIDTH FORMAT(ONLY POSITIVE INTEGERS)"
+            echo "-------------------------------------------------"
+            exit 1
+        fi
+        ;;
+    -h | --help)
+        print_help
+        exit 0
+        ;;
+    *)
+        echo "-------------------------------------------------"
+        echo "ERROR: UNKNOWN COMMAND/FILTER, CHECK -h or --help"
+        echo "-------------------------------------------------"
+        exit 1
+    esac
+done
+
+
+
+
+
+if [[ -n "$GZ_LOG_FILES" && -n "$LOG_FILES" ]]; then 
+    READ_INPUT="gzip -d -c $GZ_LOG_FILES | cat $LOG_FILES -"
+elif [[ -z "$GZ_LOG_FILES" && -n "$LOG_FILES" ]]; then
+    READ_INPUT="cat $LOG_FILES"
+elif [[ -n "$GZ_LOG_FILES" && -z "$LOG_FILES" ]]; then
+    READ_INPUT="gzip -d -c $GZ_LOG_FILES | cat -"
+elif [[ -z "$GZ_LOG_FILES" && -z "$LOG_FILES" ]]; then
+    READ_INPUT="cat -"
+fi
+
+
+
+FILTER_INPUT="| awk -v TICKER=\"$TICKER\" -v DATETIME_AFTER=\"$DATETIME_AFTER\" -v DATETIME_BEFORE=\"$DATETIME_BEFORE\" ' \
+BEGIN { FS=\";\" } \
+{ \
+    if(TICKER==\"\" && \$1<DATETIME_BEFORE && \$1>DATETIME_AFTER) \
+        print \$0; \
+    else if(TICKER!=\"\" && \$1<DATETIME_BEFORE && \$1>DATETIME_AFTER) \
+    { \
+        split (TICKER,s_ticker,\" \"); \
+        for (i in s_ticker) \
+            if(s_ticker[i]==\$2 && \$1<DATETIME_BEFORE && \$1>DATETIME_AFTER) \
+                print \$0; \
+    } \
+} \
+' | sort -s -u"
+
+case "$COMMAND" in
+    list-tick)
+        USE_COMMAND="| awk ' \
+        BEGIN { FS=\";\" } \
+        { \
+            print \$2; \
+        } \
+        ' | sort -s -u"
+        ;;
+    profit)
+        USE_COMMAND="| awk ' \
+            BEGIN { FS=\";\" } \
+            {if(\$3==\"buy\") \
+                PROFIT-=\$4*\$6; \
+            else \
+                PROFIT+=\$4*\$6; \
+            } \
+            END{printf(\"%.2f\n\",PROFIT)} \
+            '"
+            ;;
+        pos)
+            USE_COMMAND="| awk ' \
+                BEGIN { FS=\";\" } \
+                { \
+                    if(\$3==\"buy\") \
+                        BUY_DATA[\$2]+=\$6; \
+                    else \
+                        SELL_DATA[\$2]+=\$6; \
+                    LAST_PRICE_DATA[\$2]=\$4; \
+                    POSITIONS[\$2]=(BUY_DATA[\$2]-SELL_DATA[\$2]); \
+                }\
+                END { \
+                for (i in POSITIONS) \
+                    { \
+                        POSITIONS[i]*=LAST_PRICE_DATA[i]; \
+                        POSITIONS_STRING=sprintf(\"%.2f\",POSITIONS[i]); \
+                        if(length(POSITIONS_STRING)>MAX_LEN) \
+                            MAX_LEN=length(POSITIONS_STRING); \
+                    } \
+                for (i in POSITIONS) \
+                    { \
+                        printf(\"%-10s: %*.2f\n\",i,MAX_LEN,POSITIONS[i]); \
+                    } \
+                } \
+                ' | sort -n -t ':' -k2 -r"
+                ;;
+            last-price)
+                USE_COMMAND="| awk ' \
+                    BEGIN { FS=\";\" } \
+                    { \
+                        LAST_PRICE_DATA[\$2]=\$4; \
+                    } \
+                    END { \
+                    for (i in LAST_PRICE_DATA) \
+                        { \
+                            LAST_PRICE_DATA_STRING=sprintf(\"%.2f\",LAST_PRICE_DATA[i]); \
+                            if(length(LAST_PRICE_DATA_STRING)>MAX_LEN) \
+                                MAX_LEN=length(LAST_PRICE_DATA_STRING); \
+                        } \
+                    for (i in LAST_PRICE_DATA) \
+                        { \
+                            printf(\"%-10s: %*.2f\n\",i,MAX_LEN,LAST_PRICE_DATA[i]); \
+                        } \
+                    } \
+                    ' | sort -t ':' -k1"
+                    ;;
+                hist-ord)
+                    USE_COMMAND="| awk -v WIDTH=\"$WIDTH\" ' \
+                        BEGIN { FS=\";\" } \
+                        { \
+                            TICK_TRANS[\$2]+=1; \
+                        } \
+                        END { \
+                        for (i in TICK_TRANS) \
+                            { \
+                                if(TICK_TRANS[i]>SIGN_VALUE) \
+                                    SIGN_VALUE=TICK_TRANS[i]; \
+                            } \
+                            if(WIDTH==\"\"){ \
+                            for (i in TICK_TRANS) \
+                                { \
+                                    printf(\"%-10s: \",i); \
+                                    while (TICK_TRANS[i]>0){ \
+                                        printf(\"#\"); \
+                                        TICK_TRANS[i]--; \
+                                    } \
+                                    printf(\"\n\"); \
+                                } \
+                            } \
+                        else { \
+                            SIGN_VALUE=(SIGN_VALUE/WIDTH); \
+                                for(i in TICK_TRANS) \
+                                    { \
+                                        printf(\"%-10s: \",i); \
+                                        while(TICK_TRANS[i]>=SIGN_VALUE){ \
+                                            printf(\"#\"); \
+                                            TICK_TRANS[i]-=SIGN_VALUE; \
+                                        } \
+                                    printf(\"\n\"); \
+                                    } \
+                                } \
+                            } \
+                        ' | sort -t ':' -k1"
+                    ;;
+                graph-pos)
+                    if [[ -z "$WIDTH" ]]; then
+                        WIDTH="1000"
+                    fi
+                    USE_COMMAND="| awk -v WIDTH=\"$WIDTH\" ' \
+                        BEGIN { FS=\";\" } \
+                        { \
+                            if(\$3==\"buy\") \
+                                BUY_DATA[\$2]+=\$6; \
+                            else \
+                                SELL_DATA[\$2]+=\$6; \
+                            LAST_PRICE_DATA[\$2]=\$4; \
+                            POSITIONS[\$2]=(BUY_DATA[\$2]-SELL_DATA[\$2]); \
+                        } \
+                        END { \
+                        for (i in POSITIONS) \
+                            { \
+                                POSITIONS[i]*=LAST_PRICE_DATA[i]; \
+                                if(sqrt(POSITIONS[i]^2)>SIGN_VALUE) \
+                                    SIGN_VALUE=sqrt(POSITIONS[i]^2); \
+                            } \
+                            SIGN_VALUE=(SIGN_VALUE/WIDTH);\
+                        for (i in POSITIONS) \
+                            { \
+                                printf(\"%-10s:\",i); \
+                                if(POSITIONS[i]>0){ \
+                                    if(POSITIONS[i]>=SIGN_VALUE) \
+                                        printf(\" \"); \
+                                while(POSITIONS[i]>=SIGN_VALUE){ \
+                                    printf(\"#\"); \
+                                    POSITIONS[i]-=SIGN_VALUE; \
+                                    } \
+                                printf(\"\n\"); \
+                                } \
+                            else { \
+                                if(POSITIONS[i]<=(SIGN_VALUE*(-1))) \
+                                    printf(\" \"); \
+                                while(POSITIONS[i]<=(SIGN_VALUE*(-1))){ \
+                                    printf(\"!\"); \
+                                    POSITIONS[i]+=SIGN_VALUE; \
+                                    } \
+                                    printf(\"\n\"); \
+                                } \
+                            } \
+                        } \
+                        ' | sort -t ':' -k1"
+                        ;;
+esac
+
+eval "$READ_INPUT $FILTER_INPUT $USE_COMMAND"
+
