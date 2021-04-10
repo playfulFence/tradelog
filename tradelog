@@ -1,14 +1,5 @@
 #! /bin/sh
 
-#-----------------------------------------#
-# MIKHAILOV KIRILL                        #
-# UNIVERSITY: BUT in BRNO, CZECH REPUBLIC #
-# BUT LOGIN: xmikha00                     #
-# 03.04.2021                              #
-# IOS PROJECT 1                           #
-#-----------------------------------------#
-
-
 print_help()
 {
     echo "Usage: tradelog [-h|--help]"
