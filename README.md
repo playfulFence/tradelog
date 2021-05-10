@@ -1,7 +1,5 @@
 # tradelog
-Shell script created to conviniently and productively display and organize your log-files from te stock exchange
-
-!!!chmod u+x tradelog in terminal BEFORE USING!!!
+Shell script created to conviniently and productively display and organize your log-files from the stock exchange
 
 
 Usage: tradelog [-h|--help]
