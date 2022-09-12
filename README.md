@@ -8,7 +8,7 @@ Usage: tradelog [-h|--help]
         ---------------------------------------DETAILED DESCRIPTION------------------------------------
           COMMAND can be ONE of:
         |-----------------------------------------------------------------------------------------|
-        |• list-tick -- a list of occurring stock exchange symbols, so-called \"tickers\".        | 
+        |• list-tick -- a list of occurring stock exchange symbols, so-called "tickers".          | 
         |-----------------------------------------------------------------------------------------|
         |• profit -- statement of total profit from closed positions.                             |
         |-----------------------------------------------------------------------------------------|
